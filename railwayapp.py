@@ -56,6 +56,11 @@ def load_data():
 
 small_areas_gdf, city_lane_gdf, employed_df, population_df = load_data()
 
+# Extract latitude and longitude from geometry for GeoDataFrames
+small_areas_gdf['latitude'] = small_areas_gdf.geometry.y
+small_areas_gdf['longitude'] = small_areas_gdf.geometry.x
+
+
 # Sidebar Widgets
 st.sidebar.title("Visualization Filters")
 selected_year = st.sidebar.slider("Select Year", min_value=2020, max_value=2025, value=2024)
@@ -95,16 +100,23 @@ if dataset_choice in ["Population", "Employment"]:
 if st.checkbox("Show Suggested Train Stops"):
     st.subheader("Optimal Train Stop Points")
     
-    # Ensure latitude and longitude are numeric
-    if 'latitude' in population_filtered.columns and population_filtered['latitude'].dtype == 'object':
-        population_filtered['latitude'] = pd.to_numeric(population_filtered['latitude'], errors='coerce')
-    if 'longitude' in population_filtered.columns and population_filtered['longitude'].dtype == 'object':
-        population_filtered['longitude'] = pd.to_numeric(population_filtered['longitude'], errors='coerce')
+    population_filtered['latitude'] = population_filtered.geometry.y
+    population_filtered['longitude'] = population_filtered.geometry.x
+
     
     # Drop any non-numeric columns for aggregation
     try:
-        optimal_points = population_filtered.groupby("smsv")[["latitude", "longitude"]].mean()
-        optimal_points = optimal_points.dropna()  # Remove rows with missing lat/lon values
+        # Check data types of population_filtered DataFrame
+        st.write("Data Types in population_filtered:", population_filtered.dtypes)
+        
+        # Remove non-numeric columns before calculating the mean
+        numeric_population_filtered = population_filtered.select_dtypes(include=['number'])
+        if 'latitude' in population_filtered.columns and 'longitude' in population_filtered.columns:
+            optimal_points = population_filtered.dropna(subset=['latitude', 'longitude'])
+            optimal_points = optimal_points.groupby('smsv')[['latitude', 'longitude']].mean()
+        else:
+            st.error("Latitude and longitude data is missing.")
+
     except KeyError as e:
         st.error(f"KeyError encountered: {str(e)}")
         optimal_points = pd.DataFrame(columns=["latitude", "longitude"])  # Empty DataFrame to avoid further errors

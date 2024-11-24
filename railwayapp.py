@@ -64,12 +64,12 @@ city_lane_gdf = gpd.read_file(selected_file_path).to_crs("EPSG:4326")
 
 # Group points by line and create LineStrings
 def create_linestring(group):
-    group = group.drop(columns="line")  # Exclude the grouping column explicitly
     points = group.sort_values("id").geometry.tolist()
     if len(points) > 1:  # Only create LineString if there are at least 2 points
         return LineString(points)
     return None  # Return None for invalid groups
 
+# Apply the function without the invalid argument
 line_strings = city_lane_gdf.groupby("line", group_keys=False).apply(create_linestring)
 
 # Filter out None values (invalid LineStrings)
@@ -85,12 +85,15 @@ city_lane_paths["coordinates"] = city_lane_paths.geometry.apply(
     lambda geom: list(geom.coords) if geom else None
 )
 
+
+
 # Line selection and thickness control
 st.sidebar.title("Visualization Filters")
 selected_year = st.sidebar.slider("Select Year", min_value=2020, max_value=2025, value=2024)
+map_type = st.sidebar.selectbox("Select Map Type", ["Scatter", "Heatmap"])
 show_city_lane = st.sidebar.checkbox("Show City Lane", value=True)
 if show_city_lane:
-    line_thickness = st.sidebar.slider("Line Thickness", min_value=20, max_value=50, value=30)
+    line_thickness = st.sidebar.slider("Line Thickness", min_value=17, max_value=54, value=25)
 
 # Filter data for the selected year
 population_filtered = population_df[population_df['ar'] == selected_year]
@@ -107,11 +110,11 @@ layers = []
 # Population Layer
 if not population_filtered.empty:
     population_layer = pdk.Layer(
-        "ScatterplotLayer",
+        "ScatterplotLayer" if map_type == "Scatter" else "HeatmapLayer",
         data=population_filtered.dropna(subset=['latitude', 'longitude']),
         get_position=["longitude", "latitude"],
-        get_radius=200,
-        get_color="[0, 128, 255, 160]",
+        get_radius=200 if map_type == "Scatter" else 1000,
+        get_color="[0, 128, 255, 160]" if map_type == "Scatter" else None,
         pickable=True,
     )
     layers.append(population_layer)
@@ -119,11 +122,11 @@ if not population_filtered.empty:
 # Employment Layer
 if not employed_filtered.empty:
     employment_layer = pdk.Layer(
-        "ScatterplotLayer",
+        "ScatterplotLayer" if map_type == "Scatter" else "HeatmapLayer",
         data=employed_filtered.dropna(subset=['latitude', 'longitude']),
         get_position=["longitude", "latitude"],
-        get_radius=200,
-        get_color="[255, 0, 128, 160]",
+        get_radius=200 if map_type == "Scatter" else 1000,
+        get_color="[255, 0, 128, 160]" if map_type == "Scatter" else None,
         pickable=True,
     )
     layers.append(employment_layer)
@@ -144,7 +147,7 @@ if show_city_lane:
 view_state = pdk.ViewState(
     latitude=small_areas_gdf['latitude'].mean(),
     longitude=small_areas_gdf['longitude'].mean(),
-    zoom=10,
+    zoom=11,
     pitch=50,
 )
 

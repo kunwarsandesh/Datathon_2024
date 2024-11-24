@@ -3,31 +3,36 @@ import pandas as pd
 import geopandas as gpd
 import pydeck as pdk
 
+
+
+
 # Load datasets (adjust paths as needed)
 @st.cache_data
 def load_data():
+    
+
     small_areas_gdf = gpd.read_file('/workspaces/Datathon_2024/data/smasvaedi/smasvaedi_2021.json')
-    # Inspect GeoJSON data
-    # Select the necessary columns
-    smasvaedi_filtered = small_areas_gdf[['smsv', 'smsv_label_en', 'geometry']]
-    
+
     # Filter rows where nuts3 is '001'
-    smasvaedi_filtered = smasvaedi_filtered[small_areas_gdf['nuts3'] == '001']
+    smasvaedi_filtered = small_areas_gdf[small_areas_gdf['nuts3'] == '001']
+
+    # Select the necessary columns
+    smasvaedi_filtered = smasvaedi_filtered[['smsv', 'smsv_label_en', 'geometry']]
     
-    #change smsv to int
+
+    
+    # Change smsv to str
     smasvaedi_filtered['smsv'] = smasvaedi_filtered['smsv'].astype(str)
-    #change label to string
-    smasvaedi_filtered['smsv_label_en'] = smasvaedi_filtered['smsv_label_en'].astype(str)
-    #get all the unique smsv values and save them in an array
+    # Get all the unique smsv values and save them in an array
     smsv_arr = smasvaedi_filtered['smsv'].unique()
     
     # Create a new list with the additional numbers
-    new_numbers =['0020' ,'0035', '0018', '0022', '0013' ,'0034', '0033' ,'0026' ,'0048' ,'0186','0019' , '0011' ,'0042', '0039', '0053' ,'0024', '0176', '0004', '0192','0060', '0028', '0043' ,'0037']
+    new_numbers = ['0020', '0035', '0018', '0022', '0013', '0034', '0033', '0026', '0048', '0186', '0019', '0011', '0042', '0039', '0053', '0024', '0176', '0004', '0192', '0060', '0028', '0043', '0037']
     
     # Convert smsv_arr to a list
     smsv_arr = smsv_arr.tolist()
     
-    # Extend the smsv_arr list with the new numbers (more efficient than append for large lists)
+    # Extend the smsv_arr list with the new numbers
     smsv_arr.extend(new_numbers)
     small_areas_gdf = smasvaedi_filtered
     city_lane_gdf = gpd.read_file('/workspaces/Datathon_2024/data/geojson_files/cityline_2025.geojson')
@@ -36,34 +41,26 @@ def load_data():
     # Rename 'smasvaedi' to 'smsv' if not already done
     employed_df.rename(columns={'smasvaedi': 'smsv'}, inplace=True)
     
-    #change smsv to int
+    # Change smsv to str and pad with leading zeros to ensure 4 digits
     employed_df['smsv'] = employed_df['smsv'].astype(str).str.zfill(4)
-    #check if smsv values from employed_df are in smsv_arr  if not then filter them out
+    # Check if smsv values from employed_df are in smsv_arr and filter accordingly
     employed_df = employed_df[employed_df['smsv'].isin(smsv_arr)]
     
-
     population_df = pd.read_csv('/workspaces/Datathon_2024/data/num_of_residents/ibuafjoldi.csv')
-    #rename column name from smasvaedi to smsv
+    # Rename column name from smasvaedi to smsv
     population_df.rename(columns={'smasvaedi': 'smsv'}, inplace=True)
-    
     population_df['smsv'] = population_df['smsv'].astype(str).str.zfill(4)
-    
-    #check if smsv values from population_df are in smsv_arr  if not then filter them out
+    # Filter based on smsv array
     population_df = population_df[population_df['smsv'].isin(smsv_arr)]
 
     return small_areas_gdf, city_lane_gdf, employed_df, population_df
 
-
 small_areas_gdf, city_lane_gdf, employed_df, population_df = load_data()
 
-# Extract latitude and longitude from the centroid of each geometry
+# Calculate centroids for geometry and create latitude and longitude columns
 small_areas_gdf['centroid'] = small_areas_gdf.geometry.centroid
-
-# Now extract latitude and longitude from the centroid
 small_areas_gdf['latitude'] = small_areas_gdf.centroid.y
 small_areas_gdf['longitude'] = small_areas_gdf.centroid.x
-
-
 
 # Sidebar Widgets
 st.sidebar.title("Visualization Filters")
@@ -73,22 +70,11 @@ map_type = st.sidebar.selectbox("Select Map Type", ["Scatter", "Heatmap"])
 
 # Data Filtering
 population_filtered = population_df[population_df['ar'] == selected_year]
-
-# Merge population data with the small areas GeoDataFrame to get the geometries
-population_filtered = population_filtered.merge(small_areas_gdf[['smsv', 'geometry']], on='smsv', how='left')
-
-# Ensure that population_filtered is now a GeoDataFrame
-population_filtered = gpd.GeoDataFrame(population_filtered, geometry='geometry')
-
-# Calculate the centroids for the merged population data
-population_filtered['centroid'] = population_filtered.geometry.centroid
-
-# Extract latitude and longitude from the centroid
-population_filtered['latitude'] = population_filtered.centroid.y
-population_filtered['longitude'] = population_filtered.centroid.x
-
-
 employed_filtered = employed_df[employed_df['ar'] == selected_year]
+
+# Merge population and employment data with spatial data to get lat/lon
+population_filtered = population_filtered.merge(small_areas_gdf[['smsv', 'latitude', 'longitude']], on='smsv', how='left')
+employed_filtered = employed_filtered.merge(small_areas_gdf[['smsv', 'latitude', 'longitude']], on='smsv', how='left')
 
 # Map Visualization
 st.title("City Planning Visualization")
@@ -100,10 +86,12 @@ elif dataset_choice == "Employment":
     map_data = employed_filtered.rename(columns={"fjoldi": "count"})
 else:
     st.subheader("City Lane Visualization")
-    map_data = city_lane_gdf.rename(columns={"geometry": "location"})
+    map_data = city_lane_gdf
 
 # Pydeck Map
 if dataset_choice in ["Population", "Employment"]:
+    # Ensure data is in the right format for Pydeck
+    map_data = map_data.dropna(subset=['latitude', 'longitude'])
     layer = pdk.Layer(
         "ScatterplotLayer" if map_type == "Scatter" else "HeatmapLayer",
         data=map_data,
@@ -118,34 +106,14 @@ if dataset_choice in ["Population", "Employment"]:
 # Optimal Train Stop Points
 if st.checkbox("Show Suggested Train Stops"):
     st.subheader("Optimal Train Stop Points")
-    
-    population_filtered['latitude'] = population_filtered.geometry.y
-    population_filtered['longitude'] = population_filtered.geometry.x
 
-    
-    # Drop any non-numeric columns for aggregation
-    try:
-        # Check data types of population_filtered DataFrame
-        st.write("Data Types in population_filtered:", population_filtered.dtypes)
-        
-        # Remove non-numeric columns before calculating the mean
-        numeric_population_filtered = population_filtered.select_dtypes(include=['number'])
-        if 'latitude' in population_filtered.columns and 'longitude' in population_filtered.columns:
-            optimal_points = population_filtered.dropna(subset=['latitude', 'longitude'])
-            optimal_points = optimal_points.groupby('smsv')[['latitude', 'longitude']].mean()
-        else:
-            st.error("Latitude and longitude data is missing.")
-
-    except KeyError as e:
-        st.error(f"KeyError encountered: {str(e)}")
-        optimal_points = pd.DataFrame(columns=["latitude", "longitude"])  # Empty DataFrame to avoid further errors
-    
-    # Display the map if we have valid points
+    # Ensure population_filtered has valid lat/lon
+    optimal_points = population_filtered.dropna(subset=['latitude', 'longitude'])
     if not optimal_points.empty:
-        st.map(optimal_points)
+        # Display the map with optimal points
+        st.map(optimal_points[['latitude', 'longitude']])
     else:
         st.error("No optimal points to display.")
-
 
 # Summary Section
 st.sidebar.markdown("### Summary Statistics")

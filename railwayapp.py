@@ -100,13 +100,14 @@ if not employed_filtered.empty:
     )
     layers.append(employment_layer)
 
+line_thickness = st.sidebar.slider("Line Thickness", min_value=7, max_value=24, value=10)
 # City Lane Layer
 if show_city_lane:
     city_lane_layer = pdk.Layer(
         "PathLayer",
         data=city_lane_paths.dropna(subset=["coordinates"]),
         get_path="coordinates",
-        get_width=4,
+        get_width=line_thickness,
         get_color="[255, 0, 0]",
         pickable=True
     )

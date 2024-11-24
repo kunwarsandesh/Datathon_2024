@@ -93,21 +93,28 @@ if dataset_choice in ["Population", "Employment"]:
 
 # Optimal Train Stop Points
 if st.checkbox("Show Suggested Train Stops"):
-    
     st.subheader("Optimal Train Stop Points")
-
-    if 'small_area_id' in population_filtered.columns:
-        optimal_points = population_filtered.groupby("small_area_id").mean()[["latitude", "longitude"]]
-    elif 'smsv' in population_filtered.columns:
-        optimal_points = population_filtered.groupby("smsv").mean()[["latitude", "longitude"]]
-    else:
-        st.error("Column for small areas not found in the dataset.")
+    
+    # Ensure latitude and longitude are numeric
+    if 'latitude' in population_filtered.columns and population_filtered['latitude'].dtype == 'object':
+        population_filtered['latitude'] = pd.to_numeric(population_filtered['latitude'], errors='coerce')
+    if 'longitude' in population_filtered.columns and population_filtered['longitude'].dtype == 'object':
+        population_filtered['longitude'] = pd.to_numeric(population_filtered['longitude'], errors='coerce')
+    
+    # Drop any non-numeric columns for aggregation
+    try:
+        optimal_points = population_filtered.groupby("smsv")[["latitude", "longitude"]].mean()
+        optimal_points = optimal_points.dropna()  # Remove rows with missing lat/lon values
+    except KeyError as e:
+        st.error(f"KeyError encountered: {str(e)}")
         optimal_points = pd.DataFrame(columns=["latitude", "longitude"])  # Empty DataFrame to avoid further errors
-
+    
+    # Display the map if we have valid points
     if not optimal_points.empty:
         st.map(optimal_points)
     else:
         st.error("No optimal points to display.")
+
 
 # Summary Section
 st.sidebar.markdown("### Summary Statistics")

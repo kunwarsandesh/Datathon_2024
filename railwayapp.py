@@ -103,12 +103,27 @@ if dataset_choice in ["Population", "Employment"]:
     view_state = pdk.ViewState(latitude=64.1355, longitude=-21.8954, zoom=10)
     st.pydeck_chart(pdk.Deck(layers=[layer], initial_view_state=view_state))
 
+import pyproj
+
+# Define the projection (assuming UTM zone 27N for this example)
+transformer = pyproj.Transformer.from_crs("epsg:32627", "epsg:4326", always_xy=True)
+
 # Optimal Train Stop Points
 if st.checkbox("Show Suggested Train Stops"):
     st.subheader("Optimal Train Stop Points")
 
     # Ensure population_filtered has valid lat/lon
     optimal_points = population_filtered.dropna(subset=['latitude', 'longitude'])
+
+    # Convert coordinates
+    optimal_points[['longitude', 'latitude']] = optimal_points.apply(
+        lambda row: transformer.transform(row['longitude'], row['latitude']), axis=1, result_type='expand'
+    )
+
+    # Debugging: Print the shape and head of the DataFrame
+    st.write("Optimal Points Shape:", optimal_points.shape)
+    st.write("Optimal Points DataFrame:", optimal_points.head())
+
     if not optimal_points.empty:
         # Display the map with optimal points
         st.map(optimal_points[['latitude', 'longitude']])

@@ -4,7 +4,7 @@ import geopandas as gpd
 import pydeck as pdk
 
 # Load datasets (adjust paths as needed)
-@st.cache
+@st.cache_data
 def load_data():
     small_areas_gdf = gpd.read_file('/workspaces/Datathon_2024/data/smasvaedi/smasvaedi_2021.json')
     city_lane_gdf = gpd.read_file('/workspaces/Datathon_2024/data/geojson_files/cityline_2025.geojson')
@@ -12,15 +12,6 @@ def load_data():
     population_df = pd.read_csv('/workspaces/Datathon_2024/data/num_of_residents/ibuafjoldi.csv')
     return small_areas_gdf, city_lane_gdf, employed_df, population_df
 
-
-
-
-"""
-income_decile_df = pd.read_csv('data/income_data/tekjutiundir.csv')
-
-dwellings_df = pd.read_csv('data/dwellings/ibudir.csv')
-construction_sites_df = pd.read_csv('/workspaces/Datathon_2024/data/hms_lodir/lodir.csv')  #wait for new data
-"""
 
 small_areas_gdf, city_lane_gdf, employed_df, population_df = load_data()
 

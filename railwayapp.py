@@ -3,123 +3,123 @@ import pandas as pd
 import geopandas as gpd
 import pydeck as pdk
 
-# Load datasets
+
+
+
+# Load datasets (adjust paths as needed)
 @st.cache_data
 def load_data():
-    # Load small areas GeoJSON
+    
+
     small_areas_gdf = gpd.read_file('/workspaces/Datathon_2024/data/smasvaedi/smasvaedi_2021.json')
-    
-    # Filter and prepare small areas
-    small_areas_gdf = small_areas_gdf[small_areas_gdf['nuts3'] == '001']
-    small_areas_gdf = small_areas_gdf[['smsv', 'smsv_label_en', 'geometry']]
-    small_areas_gdf['smsv'] = small_areas_gdf['smsv'].astype(str)
-    
-    # Convert all geometries to WGS 84 (EPSG:4326) for uniform coordinate reference system
-    small_areas_gdf = small_areas_gdf.to_crs("EPSG:4326")
-    # Fix invalid geometries
-    small_areas_gdf['geometry'] = small_areas_gdf.geometry.buffer(0)
-    small_areas_gdf = small_areas_gdf[small_areas_gdf.is_valid]
-    
-    # Extract latitude and longitude from geometries
-    small_areas_gdf['latitude'] = small_areas_gdf.geometry.centroid.y
-    small_areas_gdf['longitude'] = small_areas_gdf.geometry.centroid.x
 
-    # Load city lane GeoJSON
+    # Filter rows where nuts3 is '001'
+    smasvaedi_filtered = small_areas_gdf[small_areas_gdf['nuts3'] == '001']
+
+    # Select the necessary columns
+    smasvaedi_filtered = smasvaedi_filtered[['smsv', 'smsv_label_en', 'geometry']]
+    
+
+    
+    # Change smsv to str
+    smasvaedi_filtered['smsv'] = smasvaedi_filtered['smsv'].astype(str)
+    # Get all the unique smsv values and save them in an array
+    smsv_arr = smasvaedi_filtered['smsv'].unique()
+    
+    # Create a new list with the additional numbers
+    new_numbers = ['0020', '0035', '0018', '0022', '0013', '0034', '0033', '0026', '0048', '0186', '0019', '0011', '0042', '0039', '0053', '0024', '0176', '0004', '0192', '0060', '0028', '0043', '0037']
+    
+    # Convert smsv_arr to a list
+    smsv_arr = smsv_arr.tolist()
+    
+    # Extend the smsv_arr list with the new numbers
+    smsv_arr.extend(new_numbers)
+    small_areas_gdf = smasvaedi_filtered
     city_lane_gdf = gpd.read_file('/workspaces/Datathon_2024/data/geojson_files/cityline_2025.geojson')
-    city_lane_gdf = city_lane_gdf.to_crs("EPSG:4326")
-    city_lane_gdf['geometry'] = city_lane_gdf.geometry.buffer(0)
-    city_lane_gdf = city_lane_gdf[city_lane_gdf.is_valid]
 
-    # Load employment CSV
     employed_df = pd.read_csv('/workspaces/Datathon_2024/data/num_of_people_working/fjoldi_starfandi.csv')
+    # Rename 'smasvaedi' to 'smsv' if not already done
     employed_df.rename(columns={'smasvaedi': 'smsv'}, inplace=True)
+    
+    # Change smsv to str and pad with leading zeros to ensure 4 digits
     employed_df['smsv'] = employed_df['smsv'].astype(str).str.zfill(4)
-
-    # Load population CSV
+    # Check if smsv values from employed_df are in smsv_arr and filter accordingly
+    employed_df = employed_df[employed_df['smsv'].isin(smsv_arr)]
+    
     population_df = pd.read_csv('/workspaces/Datathon_2024/data/num_of_residents/ibuafjoldi.csv')
+    # Rename column name from smasvaedi to smsv
     population_df.rename(columns={'smasvaedi': 'smsv'}, inplace=True)
     population_df['smsv'] = population_df['smsv'].astype(str).str.zfill(4)
+    # Filter based on smsv array
+    population_df = population_df[population_df['smsv'].isin(smsv_arr)]
 
     return small_areas_gdf, city_lane_gdf, employed_df, population_df
 
-# Load the datasets
 small_areas_gdf, city_lane_gdf, employed_df, population_df = load_data()
 
-# Streamlit Sidebar Widgets
+# Calculate centroids for geometry and create latitude and longitude columns
+small_areas_gdf['centroid'] = small_areas_gdf.geometry.centroid
+small_areas_gdf['latitude'] = small_areas_gdf.centroid.y
+small_areas_gdf['longitude'] = small_areas_gdf.centroid.x
+
+# Sidebar Widgets
 st.sidebar.title("Visualization Filters")
 selected_year = st.sidebar.slider("Select Year", min_value=2020, max_value=2025, value=2024)
+dataset_choice = st.sidebar.selectbox("Select Dataset", ["Population", "Employment", "City Lane"])
 map_type = st.sidebar.selectbox("Select Map Type", ["Scatter", "Heatmap"])
-show_city_lane = st.sidebar.checkbox("Show City Lane")
 
-# Filter data for the selected year
+# Data Filtering
 population_filtered = population_df[population_df['ar'] == selected_year]
 employed_filtered = employed_df[employed_df['ar'] == selected_year]
 
-# Merge population and employment data with small areas for spatial data
-population_filtered = population_filtered.merge(
-    small_areas_gdf[['smsv', 'latitude', 'longitude']], 
-    on='smsv', 
-    how='left'
-)
-
-employed_filtered = employed_filtered.merge(
-    small_areas_gdf[['smsv', 'latitude', 'longitude']], 
-    on='smsv', 
-    how='left'
-)
-
-# Verify merge outcome
-st.write("Population Filtered Sample:", population_filtered.head())
-
-# Ensure only rows with valid latitude and longitude are used for visualization
-population_filtered = population_filtered.dropna(subset=['latitude', 'longitude'])
-employed_filtered = employed_filtered.dropna(subset=['latitude', 'longitude'])
+# Merge population and employment data with spatial data to get lat/lon
+population_filtered = population_filtered.merge(small_areas_gdf[['smsv', 'latitude', 'longitude']], on='smsv', how='left')
+employed_filtered = employed_filtered.merge(small_areas_gdf[['smsv', 'latitude', 'longitude']], on='smsv', how='left')
 
 # Map Visualization
 st.title("City Planning Visualization")
-layers = []
-
-# Add Population Layer
-if not population_filtered.empty:
-    population_layer = pdk.Layer(
-        "ScatterplotLayer",
-        data=population_filtered,
-        get_position=["longitude", "latitude"],
-        get_radius=200,
-        get_color="[0, 128, 255, 160]",
-        pickable=True,
-    )
-    layers.append(population_layer)
-
-# Add City Lane Layer if checked
-if show_city_lane and not city_lane_gdf.empty:
-    city_lane_layer = pdk.Layer(
-        "PathLayer",
-        data=city_lane_gdf,
-        get_path="geometry.coordinates",
-        get_width=5,
-        get_color="[255, 0, 0]",
-        pickable=True,
-    )
-    layers.append(city_lane_layer)
-
-# Define the View State
-view_state = pdk.ViewState(
-    latitude=64.1355,
-    longitude=-21.8954,
-    zoom=10,
-    pitch=50,
-)
-
-# Render the map if layers exist
-if layers:
-    st.pydeck_chart(pdk.Deck(layers=layers, initial_view_state=view_state))
+if dataset_choice == "Population":
+    st.subheader("Population Distribution")
+    map_data = population_filtered.rename(columns={"fjoldi": "count"})
+elif dataset_choice == "Employment":
+    st.subheader("Employment Distribution")
+    map_data = employed_filtered.rename(columns={"fjoldi": "count"})
 else:
-    st.error("No data available to display.")
+    st.subheader("City Lane Visualization")
+    map_data = city_lane_gdf
 
-# Summary Section in Sidebar
+# Pydeck Map
+if dataset_choice in ["Population", "Employment"]:
+    # Ensure data is in the right format for Pydeck
+    map_data = map_data.dropna(subset=['latitude', 'longitude'])
+    layer = pdk.Layer(
+        "ScatterplotLayer" if map_type == "Scatter" else "HeatmapLayer",
+        data=map_data,
+        get_position=["longitude", "latitude"],
+        get_radius=200 if map_type == "Scatter" else 1000,
+        get_color="[200, 30, 0, 160]" if map_type == "Scatter" else None,
+        aggregation="mean" if map_type == "Heatmap" else None,
+    )
+    view_state = pdk.ViewState(latitude=64.1355, longitude=-21.8954, zoom=10)
+    st.pydeck_chart(pdk.Deck(layers=[layer], initial_view_state=view_state))
+
+# Optimal Train Stop Points
+if st.checkbox("Show Suggested Train Stops"):
+    st.subheader("Optimal Train Stop Points")
+
+    # Ensure population_filtered has valid lat/lon
+    optimal_points = population_filtered.dropna(subset=['latitude', 'longitude'])
+    if not optimal_points.empty:
+        # Display the map with optimal points
+        st.map(optimal_points[['latitude', 'longitude']])
+    else:
+        st.error("No optimal points to display.")
+
+# Summary Section
 st.sidebar.markdown("### Summary Statistics")
-if not population_filtered.empty:
-    st.sidebar.write("Population Data:", population_filtered.describe())
-if not employed_filtered.empty:
-    st.sidebar.write("Employment Data:", employed_filtered.describe())
+if dataset_choice == "Population":
+    st.sidebar.write(population_filtered.describe())
+elif dataset_choice == "Employment":
+    st.sidebar.write(employed_filtered.describe())
+else:
+    st.sidebar.write(city_lane_gdf.describe())

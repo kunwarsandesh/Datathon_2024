@@ -8,17 +8,23 @@ import pydeck as pdk
 def load_data():
     # Load small areas GeoJSON
     small_areas_gdf = gpd.read_file('/workspaces/Datathon_2024/data/smasvaedi/smasvaedi_2021.json')
-    small_areas_gdf = small_areas_gdf.to_crs("EPSG:4326")  # Transform coordinates
-    
+
     # Filter and prepare small areas
     small_areas_gdf = small_areas_gdf[small_areas_gdf['nuts3'] == '001']
     small_areas_gdf = small_areas_gdf[['smsv', 'smsv_label_en', 'geometry']]
     small_areas_gdf['smsv'] = small_areas_gdf['smsv'].astype(str)
-    
-    # Add centroids
-    small_areas_gdf['centroid'] = small_areas_gdf.geometry.centroid
-    small_areas_gdf['latitude'] = small_areas_gdf.centroid.y
-    small_areas_gdf['longitude'] = small_areas_gdf.centroid.x
+
+    # Re-project to a UTM (projected CRS) for accurate centroids
+    projected_gdf = small_areas_gdf.to_crs("EPSG:32627")  # Example UTM zone for Iceland
+    projected_gdf['centroid'] = projected_gdf.geometry.centroid
+
+    # Add latitude and longitude columns by converting back to EPSG:4326
+    projected_gdf = projected_gdf.to_crs("EPSG:4326")
+    projected_gdf['latitude'] = projected_gdf['centroid'].y
+    projected_gdf['longitude'] = projected_gdf['centroid'].x
+
+    # Update small_areas_gdf with new centroid information
+    small_areas_gdf = projected_gdf[['smsv', 'smsv_label_en', 'geometry', 'latitude', 'longitude']]
 
     # Load city lane GeoJSON
     city_lane_gdf = gpd.read_file('/workspaces/Datathon_2024/data/geojson_files/cityline_2025.geojson')

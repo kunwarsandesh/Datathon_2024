@@ -53,6 +53,8 @@ def load_data():
     # Filter based on smsv array
     population_df = population_df[population_df['smsv'].isin(smsv_arr)]
 
+ 
+
     return small_areas_gdf, city_lane_gdf, employed_df, population_df
 
 small_areas_gdf, city_lane_gdf, employed_df, population_df = load_data()
@@ -74,6 +76,9 @@ employed_filtered = employed_df[employed_df['ar'] == selected_year]
 
 # Merge population and employment data with spatial data to get lat/lon
 population_filtered = population_filtered.merge(small_areas_gdf[['smsv', 'latitude', 'longitude']], on='smsv', how='left')
+st.write("Population Filtered DataFrame:", population_filtered.head())
+st.write("Latitude and Longitude Summary:", population_filtered[['latitude', 'longitude']].describe())
+
 employed_filtered = employed_filtered.merge(small_areas_gdf[['smsv', 'latitude', 'longitude']], on='smsv', how='left')
 
 # Map Visualization
@@ -89,24 +94,33 @@ else:
     map_data = city_lane_gdf
 
 # Pydeck Map
-if dataset_choice in ["Population", "Employment"]:
+if dataset_choice == "Population":
+    st.subheader("Population Distribution")
+    map_data = population_filtered.rename(columns={"fjoldi": "count"})
+    
     # Ensure data is in the right format for Pydeck
     map_data = map_data.dropna(subset=['latitude', 'longitude'])
-    layer = pdk.Layer(
-        "ScatterplotLayer" if map_type == "Scatter" else "HeatmapLayer",
-        data=map_data,
-        get_position=["longitude", "latitude"],
-        get_radius=200 if map_type == "Scatter" else 1000,
-        get_color="[200, 30, 0, 160]" if map_type == "Scatter" else None,
-        aggregation="mean" if map_type == "Heatmap" else None,
-    )
-    view_state = pdk.ViewState(latitude=64.1355, longitude=-21.8954, zoom=10)
-    st.pydeck_chart(pdk.Deck(layers=[layer], initial_view_state=view_state))
+    
+    if map_data.empty:
+        st.error("No population data available for the selected year or area.")
+    else:
+        layer = pdk.Layer(
+            "ScatterplotLayer" if map_type == "Scatter" else "HeatmapLayer",
+            data=map_data,
+            get_position=["longitude", "latitude"],
+            get_radius=200 if map_type == "Scatter" else 1000,
+            get_color="[200, 30, 0, 160]" if map_type == "Scatter" else None,
+            pickable=True
+        )
+        view_state = pdk.ViewState(
+            latitude=map_data['latitude'].mean(),
+            longitude=map_data['longitude'].mean(),
+            zoom=10
+        )
+        st.pydeck_chart(pdk.Deck(layers=[layer], initial_view_state=view_state))
 
-import pyproj
 
-# Define the projection (assuming UTM zone 27N for this example)
-transformer = pyproj.Transformer.from_crs("epsg:32627", "epsg:4326", always_xy=True)
+
 
 # Optimal Train Stop Points
 if st.checkbox("Show Suggested Train Stops"):
@@ -115,18 +129,30 @@ if st.checkbox("Show Suggested Train Stops"):
     # Ensure population_filtered has valid lat/lon
     optimal_points = population_filtered.dropna(subset=['latitude', 'longitude'])
 
-    # Convert coordinates
-    optimal_points[['longitude', 'latitude']] = optimal_points.apply(
-        lambda row: transformer.transform(row['longitude'], row['latitude']), axis=1, result_type='expand'
-    )
-
     # Debugging: Print the shape and head of the DataFrame
     st.write("Optimal Points Shape:", optimal_points.shape)
     st.write("Optimal Points DataFrame:", optimal_points.head())
 
     if not optimal_points.empty:
-        # Display the map with optimal points
-        st.map(optimal_points[['latitude', 'longitude']])
+        # Create a pydeck Layer for the optimal points
+        layer = pdk.Layer(
+            "ScatterplotLayer",
+            data=optimal_points,
+            get_position='[longitude, latitude]',
+            get_color='[200, 30, 0, 160]',
+            get_radius=100,
+        )
+
+        # Set the view state
+        view_state = pdk.ViewState(
+            latitude=optimal_points['latitude'].mean(),
+            longitude=optimal_points['longitude'].mean(),
+            zoom=10,
+            pitch=50,
+        )
+
+        # Render the deck.gl map
+        st.pydeck_chart(pdk.Deck(layers=[layer], initial_view_state=view_state))
     else:
         st.error("No optimal points to display.")
 

@@ -24,12 +24,22 @@ def load_data():
     small_areas_gdf['latitude'] = centroids_in_4326.geometry.y
     small_areas_gdf['longitude'] = centroids_in_4326.geometry.x
 
-    # Load city lane GeoJSON
+    # Load city lane GeoJSON and create line segments
     city_lane_gdf = gpd.read_file('/workspaces/Datathon_2024/data/geojson_files/cityline_2025.geojson')
-    city_lane_gdf = city_lane_gdf.to_crs("EPSG:4326")  # Transform to EPSG:4326 for visualization
+    city_lane_gdf = city_lane_gdf.to_crs("EPSG:4326")  # Transform to EPSG:4326
     
-    # Convert geometry to a list of coordinates for Pydeck compatibility
-    city_lane_gdf['coordinates'] = city_lane_gdf.geometry.apply(lambda geom: list(geom.coords) if geom else None)
+    # Create line segments from consecutive points
+    line_segments = []
+    coords = city_lane_gdf.geometry.tolist()
+    for i in range(len(coords)-1):
+        start_point = coords[i]
+        end_point = coords[i+1]
+        line_segments.append({
+            'line': city_lane_gdf.iloc[i]['line'],
+            'segment': [[start_point.x, start_point.y], [end_point.x, end_point.y]]
+        })
+    
+    city_lane_df = pd.DataFrame(line_segments)
 
     # Load employment CSV
     employed_df = pd.read_csv('/workspaces/Datathon_2024/data/num_of_people_working/fjoldi_starfandi.csv')
@@ -41,9 +51,9 @@ def load_data():
     population_df.rename(columns={'smasvaedi': 'smsv'}, inplace=True)
     population_df['smsv'] = population_df['smsv'].astype(str).str.zfill(4)
 
-    return small_areas_gdf, city_lane_gdf, employed_df, population_df
+    return small_areas_gdf, city_lane_df, employed_df, population_df
 
-small_areas_gdf, city_lane_gdf, employed_df, population_df = load_data()
+small_areas_gdf, city_lane_df, employed_df, population_df = load_data()
 
 # Sidebar Widgets
 st.sidebar.title("Visualization Filters")
@@ -90,12 +100,13 @@ if not employed_filtered.empty:
 # City Lane Layer
 if show_city_lane:
     city_lane_layer = pdk.Layer(
-        "PathLayer",
-        data=city_lane_gdf.dropna(subset=['coordinates']),
-        get_path="coordinates",
-        get_width=4,
-        get_color="[0, 255, 0, 160]",
-        pickable=True,
+        "LineLayer",
+        data=city_lane_df,
+        get_source_position="segment[0]",
+        get_target_position="segment[1]",
+        get_color=[255, 0, 0],
+        get_width=3,
+        pickable=True
     )
     layers.append(city_lane_layer)
 

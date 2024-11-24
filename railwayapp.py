@@ -30,9 +30,10 @@ def load_data():
     city_lane_gdf = city_lane_gdf.to_crs("EPSG:4326")  # Transform to EPSG:4326
     
     # Group points by line and create LineStrings
-    line_strings = city_lane_gdf.groupby("line").apply(
+    line_strings = city_lane_gdf.groupby("line", group_keys=False).apply(
         lambda group: LineString(group.sort_values("id").geometry.tolist())
     )
+
 
     # Convert LineStrings to a GeoDataFrame
     city_lane_paths = gpd.GeoDataFrame(

@@ -8,21 +8,28 @@ import pydeck as pdk
 def load_data():
     # Load small areas GeoJSON
     small_areas_gdf = gpd.read_file('/workspaces/Datathon_2024/data/smasvaedi/smasvaedi_2021.json')
-    small_areas_gdf = small_areas_gdf.to_crs("EPSG:4326")  # Transform coordinates
+    small_areas_gdf = small_areas_gdf.to_crs("EPSG:4326")  # Transform to EPSG:4326 for display and mapping
     
     # Filter and prepare small areas
     small_areas_gdf = small_areas_gdf[small_areas_gdf['nuts3'] == '001']
     small_areas_gdf = small_areas_gdf[['smsv', 'smsv_label_en', 'geometry']]
     small_areas_gdf['smsv'] = small_areas_gdf['smsv'].astype(str)
     
-    # Add centroids
-    small_areas_gdf['centroid'] = small_areas_gdf.geometry.centroid
-    small_areas_gdf['latitude'] = small_areas_gdf.centroid.y
-    small_areas_gdf['longitude'] = small_areas_gdf.centroid.x
+    # Re-project to a suitable CRS for geometric calculations
+    projected_gdf = small_areas_gdf.to_crs("EPSG:3857")
+    projected_gdf['centroid'] = projected_gdf.geometry.centroid  # Calculate centroids
+    
+    # Re-project centroids back to EPSG:4326 for use in the map
+    centroids_in_4326 = projected_gdf.set_geometry('centroid').to_crs("EPSG:4326")
+    small_areas_gdf['latitude'] = centroids_in_4326.geometry.y
+    small_areas_gdf['longitude'] = centroids_in_4326.geometry.x
 
     # Load city lane GeoJSON
     city_lane_gdf = gpd.read_file('/workspaces/Datathon_2024/data/geojson_files/cityline_2025.geojson')
-    city_lane_gdf = city_lane_gdf.to_crs("EPSG:4326")  # Transform coordinates
+    city_lane_gdf = city_lane_gdf.to_crs("EPSG:4326")  # Transform to EPSG:4326 for visualization
+    
+    # Convert geometry to a list of coordinates for Pydeck compatibility
+    city_lane_gdf['coordinates'] = city_lane_gdf.geometry.apply(lambda geom: list(geom.coords) if geom else None)
 
     # Load employment CSV
     employed_df = pd.read_csv('/workspaces/Datathon_2024/data/num_of_people_working/fjoldi_starfandi.csv')
@@ -80,9 +87,6 @@ if not employed_filtered.empty:
     )
     layers.append(employment_layer)
 
-# Convert city lane geometry to a format compatible with Pydeck
-city_lane_gdf['coordinates'] = city_lane_gdf.geometry.apply(lambda geom: list(geom.coords) if geom else [])
-
 # City Lane Layer
 if show_city_lane:
     city_lane_layer = pdk.Layer(
@@ -94,7 +98,6 @@ if show_city_lane:
         pickable=True,
     )
     layers.append(city_lane_layer)
-
 
 # Set the map view
 view_state = pdk.ViewState(

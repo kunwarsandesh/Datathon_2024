@@ -52,9 +52,19 @@ if dataset_choice in ["Population", "Employment"]:
 
 # Optimal Train Stop Points
 if st.checkbox("Show Suggested Train Stops"):
+    # Print out the columns of population_filtered to see what's available
+    st.write("Columns in population_filtered:", population_filtered.columns.tolist())
+
     st.subheader("Optimal Train Stop Points")
-    # Example: Geometric Mean (for demonstration purposes)
-    optimal_points = population_filtered.groupby("smsv").mean()[["latitude", "longitude"]]
+
+    if 'small_area_id' in population_filtered.columns:
+        optimal_points = population_filtered.groupby("small_area_id").mean()[["latitude", "longitude"]]
+    elif 'smsv' in population_filtered.columns:
+        optimal_points = population_filtered.groupby("smsv").mean()[["latitude", "longitude"]]
+    else:
+        st.error("Column for small areas not found in the dataset.")
+
+
     st.map(optimal_points)
 
 # Summary Section

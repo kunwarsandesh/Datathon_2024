@@ -1,37 +1,76 @@
 import streamlit as st
-import geopandas as gpd
 import pandas as pd
-import folium
-from streamlit_folium import st_folium
+import geopandas as gpd
+import pydeck as pdk
 
-# Load Data
+# Load datasets (adjust paths as needed)
 @st.cache
 def load_data():
-    cityline = gpd.read_file('cityline_2025.geojson')
-    smasvaedi = gpd.read_file('smasvaedi_2021.json')
-    tekjur = pd.read_csv('tekjutiundir.csv')
-    ibudir = pd.read_csv('ibudir.csv')
-    ibuafjoldi = pd.read_csv('ibuafjoldi.csv')
-    lodir = pd.read_csv('lodir.csv')
-    starfsmenn = pd.read_csv('fjoldi_starfandi.csv')
-    return cityline, smasvaedi, tekjur, ibudir, ibuafjoldi, lodir, starfsmenn
+    small_areas_gdf = gpd.read_file('/workspaces/Datathon_2024/data/smasvaedi/smasvaedi_2021.json')
+    city_lane_gdf = gpd.read_file('/workspaces/Datathon_2024/data/geojson_files/cityline_2025.geojson')
+    employed_df = pd.read_csv('/workspaces/Datathon_2024/data/num_of_people_working/fjoldi_starfandi.csv')
+    population_df = pd.read_csv('/workspaces/Datathon_2024/data/num_of_residents/ibuafjoldi.csv')
+    return small_areas_gdf, city_lane_gdf, employed_df, population_df
 
-cityline, smasvaedi, tekjur, ibudir, ibuafjoldi, lodir, starfsmenn = load_data()
 
-# Sidebar for filtering
-st.sidebar.header("Filters")
-year = st.sidebar.slider("Year", 2025, 2035, step=1)
-income_range = st.sidebar.slider("Income Range", 0, 200000, (20000, 100000))
 
-# Map Display
-st.header("Interactive Train Station Planning")
-m = folium.Map(location=[64.1355, -21.8954], zoom_start=12)  # Adjust for your region
-folium.GeoJson(cityline).add_to(m)  # Base city lines
 
-# Display map
-st_data = st_folium(m, width=700, height=500)
+"""
+income_decile_df = pd.read_csv('data/income_data/tekjutiundir.csv')
 
-# Save modified GeoJSON
-if st.button("Save Adjusted GeoJSON"):
-    # Logic to save modified station points to GeoJSON
-    st.success("GeoJSON saved successfully!")
+dwellings_df = pd.read_csv('data/dwellings/ibudir.csv')
+construction_sites_df = pd.read_csv('/workspaces/Datathon_2024/data/hms_lodir/lodir.csv')  #wait for new data
+"""
+
+small_areas_gdf, city_lane_gdf, employed_df, population_df = load_data()
+
+# Sidebar Widgets
+st.sidebar.title("Visualization Filters")
+selected_year = st.sidebar.slider("Select Year", min_value=2020, max_value=2025, value=2024)
+dataset_choice = st.sidebar.selectbox("Select Dataset", ["Population", "Employment", "City Lane"])
+map_type = st.sidebar.selectbox("Select Map Type", ["Scatter", "Heatmap"])
+
+# Data Filtering
+population_filtered = population_df[population_df['ar'] == selected_year]
+employed_filtered = employed_df[employed_df['ar'] == selected_year]
+
+# Map Visualization
+st.title("City Planning Visualization")
+if dataset_choice == "Population":
+    st.subheader("Population Distribution")
+    map_data = population_filtered.rename(columns={"fjoldi": "count"})
+elif dataset_choice == "Employment":
+    st.subheader("Employment Distribution")
+    map_data = employed_filtered.rename(columns={"fjoldi": "count"})
+else:
+    st.subheader("City Lane Visualization")
+    map_data = city_lane_gdf.rename(columns={"geometry": "location"})
+
+# Pydeck Map
+if dataset_choice in ["Population", "Employment"]:
+    layer = pdk.Layer(
+        "ScatterplotLayer" if map_type == "Scatter" else "HeatmapLayer",
+        data=map_data,
+        get_position=["longitude", "latitude"],
+        get_radius=200 if map_type == "Scatter" else 1000,
+        get_color="[200, 30, 0, 160]" if map_type == "Scatter" else None,
+        aggregation="mean" if map_type == "Heatmap" else None,
+    )
+    view_state = pdk.ViewState(latitude=64.1355, longitude=-21.8954, zoom=10)
+    st.pydeck_chart(pdk.Deck(layers=[layer], initial_view_state=view_state))
+
+# Optimal Train Stop Points
+if st.checkbox("Show Suggested Train Stops"):
+    st.subheader("Optimal Train Stop Points")
+    # Example: Geometric Mean (for demonstration purposes)
+    optimal_points = population_filtered.groupby("smsv").mean()[["latitude", "longitude"]]
+    st.map(optimal_points)
+
+# Summary Section
+st.sidebar.markdown("### Summary Statistics")
+if dataset_choice == "Population":
+    st.sidebar.write(population_filtered.describe())
+elif dataset_choice == "Employment":
+    st.sidebar.write(employed_filtered.describe())
+else:
+    st.sidebar.write(city_lane_gdf.describe())

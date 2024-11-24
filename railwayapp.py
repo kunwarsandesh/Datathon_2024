@@ -80,17 +80,21 @@ if not employed_filtered.empty:
     )
     layers.append(employment_layer)
 
+# Convert city lane geometry to a format compatible with Pydeck
+city_lane_gdf['coordinates'] = city_lane_gdf.geometry.apply(lambda geom: list(geom.coords) if geom else [])
+
 # City Lane Layer
 if show_city_lane:
     city_lane_layer = pdk.Layer(
         "PathLayer",
-        data=city_lane_gdf,
-        get_path="geometry.coordinates",
+        data=city_lane_gdf.dropna(subset=['coordinates']),
+        get_path="coordinates",
         get_width=4,
         get_color="[0, 255, 0, 160]",
         pickable=True,
     )
     layers.append(city_lane_layer)
+
 
 # Set the map view
 view_state = pdk.ViewState(

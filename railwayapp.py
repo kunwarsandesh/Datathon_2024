@@ -56,9 +56,13 @@ def load_data():
 
 small_areas_gdf, city_lane_gdf, employed_df, population_df = load_data()
 
-# Extract latitude and longitude from geometry for GeoDataFrames
-small_areas_gdf['latitude'] = small_areas_gdf.geometry.y
-small_areas_gdf['longitude'] = small_areas_gdf.geometry.x
+# Extract latitude and longitude from the centroid of each geometry
+small_areas_gdf['centroid'] = small_areas_gdf.geometry.centroid
+
+# Now extract latitude and longitude from the centroid
+small_areas_gdf['latitude'] = small_areas_gdf.centroid.y
+small_areas_gdf['longitude'] = small_areas_gdf.centroid.x
+
 
 
 # Sidebar Widgets
@@ -69,6 +73,21 @@ map_type = st.sidebar.selectbox("Select Map Type", ["Scatter", "Heatmap"])
 
 # Data Filtering
 population_filtered = population_df[population_df['ar'] == selected_year]
+
+# Merge population data with the small areas GeoDataFrame to get the geometries
+population_filtered = population_filtered.merge(small_areas_gdf[['smsv', 'geometry']], on='smsv', how='left')
+
+# Ensure that population_filtered is now a GeoDataFrame
+population_filtered = gpd.GeoDataFrame(population_filtered, geometry='geometry')
+
+# Calculate the centroids for the merged population data
+population_filtered['centroid'] = population_filtered.geometry.centroid
+
+# Extract latitude and longitude from the centroid
+population_filtered['latitude'] = population_filtered.centroid.y
+population_filtered['longitude'] = population_filtered.centroid.x
+
+
 employed_filtered = employed_df[employed_df['ar'] == selected_year]
 
 # Map Visualization
